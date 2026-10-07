@@ -1,0 +1,37 @@
+name: DevSecMLOps CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-secure-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Train model
+        run: python -m src.train_model
+      - name: Run tests
+        run: pytest -q
+      - name: Bandit security scan
+        run: bandit -r src
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+      - name: Model quality gate
+        run: |
+          python - <<'PY'
+          import json
+          metrics = json.load(open("models/metrics.json"))
+          print(metrics)
+          assert metrics["f1_score"] >= 0.80, "F1 score is below deployment threshold"
+          assert metrics["recall"] >= 0.80, "Recall is below deployment threshold"
+          PY
+      - name: Build Docker image
+        run: docker build -t secure-phishing-url-detector:ci .
